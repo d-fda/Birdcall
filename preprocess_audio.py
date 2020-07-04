@@ -34,9 +34,9 @@ for i in tqdm(range(len(df_train))):
     bird = df_train['ebird_code'][i]
     file_path = os.path.join(audio_path, bird, audio_filename)
     try:
-        audio = MP3(file_path)
-        if audio.info.length > 30.0:
-            continue
+        #audio = MP3(file_path)
+        #if audio.info.length > 30.0:
+        #   continue
         mel_spec = get_samples(file_path)
     except:
         continue
