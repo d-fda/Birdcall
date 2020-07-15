@@ -13,34 +13,20 @@ import tensorflow as tf
 from tensorflow import keras
 from keras.models import Sequential, Model
 from keras.layers import Input, Dense, TimeDistributed, LSTM, Dropout, Activation
-from keras.layers import Conv2D, MaxPooling2D, Flatten
+from keras.layers import Conv2D, MaxPooling2D, GlobalMaxPooling2D, Flatten
 
 import librosa
 import librosa.display
 
-samples_path = Path('../../Data/Birdcalls/train_audio_samples.pkl')
+df = pd.read_pickle(r"C:\Users\David D'Amario\Data\Birdcalls\spectrogram_samples.pkl")
 
-# sampling rate
-sr = 43
-# 5s clip length
-clip_length = int(sr*5)
+X = df['mel spec']
+y = df['bird'].to_numpy()
 
-df = pd.read_pickle(samples_path)
-
-X = []
-y = []
-for i in tqdm(range(len(df[:1000]))):
-    mel_spec = df.iloc[i]['mel spec']
-    bird = df.iloc[i]['bird']
-    n_clips = int(len(mel_spec[0][:])/clip_length)
-    for j in range(0, n_clips*clip_length, clip_length):
-        clip = mel_spec[:, j:j+clip_length]
-        clip = np.expand_dims(clip, axis=2)
-        X.append(clip)
-        y.append(bird)
-
-X = np.array(X)
-y = np.array(y)
+lst = []
+for x in X:
+    lst.append(x)
+X = np.array(lst)
 
 lb = LabelBinarizer()
 y = lb.fit_transform(y)
@@ -48,20 +34,27 @@ y = lb.fit_transform(y)
 print(y.shape)
 print(X.shape)
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=42)
+print(X[0].shape)
+print(y[0].shape)
 
-print(X_train[0])
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=42)
 
 
 #Define Model
 model = Sequential()
 
-model.add(Conv2D(12, kernel_size=(3, 3), activation='relu', padding='same', input_shape=(128, clip_length, 1)))
-model.add(Dropout(0.25))
+model.add(Conv2D(24, kernel_size=(3, 3), activation='relu', padding='same', input_shape=X_train[0].shape))
+model.add(Conv2D(24, kernel_size=(3, 3), activation='relu', padding='same'))
+model.add(MaxPooling2D(pool_size=(3, 3), padding='same'))
 
-model.add(MaxPooling2D(pool_size=(12, 12), padding='same'))
+model.add(Conv2D(24, kernel_size=(3, 3), activation='relu', padding='same'))
+model.add(Conv2D(24, kernel_size=(3, 3), activation='relu', padding='same'))
+model.add(MaxPooling2D(pool_size=(3, 3), padding='same'))
+
+
 model.add(Conv2D(12, kernel_size=(3, 3), activation='relu', padding='same'))
-model.add(Dropout(0.25))
+model.add(GlobalMaxPooling2D())
+model.add(Dropout(0.1))
 
 model.add(Flatten())
 model.add(Dense(len(y[0]), activation='softmax'))
@@ -71,9 +64,15 @@ model.compile(loss=tf.keras.losses.categorical_crossentropy, optimizer=tf.keras.
 print(model.summary())
 
 #Train and Test The Model
-history = model.fit(X_train, y_train, batch_size=4, epochs=10, verbose=1, validation_data=(X_test, y_test))
+history = model.fit(X_train, y_train, batch_size=4, epochs=40, verbose=1, validation_data=(X_test, y_test))
 
-model.save('birdcall_model')
+# serialize model to JSON
+model_json = model.to_json()
+with open("model.json", "w") as json_file:
+    json_file.write(model_json)
+# serialize weights to HDF5
+model.save_weights("model.h5")
+print("Saved model to disk")
 
 # summarize history for accuracy
 plt.plot(history.history['accuracy'])
