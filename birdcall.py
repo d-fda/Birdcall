@@ -14,19 +14,19 @@ from tensorflow import keras
 from keras.models import Sequential, Model
 from keras.layers import Input, Dense, TimeDistributed, LSTM, Dropout, Activation
 from keras.layers import Conv2D, MaxPooling2D, GlobalMaxPooling2D, Flatten
+from keras.models import model_from_json
 
 import librosa
 import librosa.display
 
-df = pd.read_pickle(r"C:\Users\David D'Amario\Data\Birdcalls\spectrogram_samples.pkl")
+df = pd.read_pickle(r"C:\Users\David D'Amario\Data\Birdcalls\train_audio_samples.pkl")
 
 X = df['mel spec']
 y = df['bird'].to_numpy()
 
-lst = []
-for x in X:
-    lst.append(x)
-X = np.array(lst)
+X = np.stack(X, axis=0)
+
+X = np.resize(X, (len(X), 128, 216, 1))
 
 lb = LabelBinarizer()
 y = lb.fit_transform(y)
@@ -37,10 +37,24 @@ print(X.shape)
 print(X[0].shape)
 print(y[0].shape)
 
+# load json and create model
+json_file = open('autoencoder.json', 'r')
+loaded_model_json = json_file.read()
+json_file.close()
+autoencoder = model_from_json(loaded_model_json)
+# load weights into new model
+autoencoder.load_weights('autoencoder.h5')
+
+# Compile
+autoencoder.compile(loss='mean_squared_error', optimizer=tf.keras.optimizers.Adam())
+print(autoencoder.summary())
+
+for i in range(len(X)):
+    X[i] = autoencoder.predict(np.array([X[i]]))
+
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=42)
 
-
-#Define Model
+# Define Model
 model = Sequential()
 
 model.add(Conv2D(24, kernel_size=(3, 3), activation='relu', padding='same', input_shape=X_train[0].shape))
@@ -51,7 +65,6 @@ model.add(Conv2D(24, kernel_size=(3, 3), activation='relu', padding='same'))
 model.add(Conv2D(24, kernel_size=(3, 3), activation='relu', padding='same'))
 model.add(MaxPooling2D(pool_size=(3, 3), padding='same'))
 
-
 model.add(Conv2D(12, kernel_size=(3, 3), activation='relu', padding='same'))
 model.add(GlobalMaxPooling2D())
 model.add(Dropout(0.1))
@@ -59,11 +72,11 @@ model.add(Dropout(0.1))
 model.add(Flatten())
 model.add(Dense(len(y[0]), activation='softmax'))
 
-#Compile
+# Compile
 model.compile(loss=tf.keras.losses.categorical_crossentropy, optimizer=tf.keras.optimizers.Adam(), metrics=['accuracy'])
 print(model.summary())
 
-#Train and Test The Model
+# Train and Test The Model
 history = model.fit(X_train, y_train, batch_size=4, epochs=40, verbose=1, validation_data=(X_test, y_test))
 
 # serialize model to JSON
