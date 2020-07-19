@@ -9,7 +9,7 @@ import warnings
 
 from tqdm import tqdm
 
-from mutagen.mp3 import MP3
+from sklearn.preprocessing import MinMaxScaler
 
 import librosa
 import librosa.display
@@ -25,21 +25,29 @@ def get_samples(file_path):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         wave_data, sr = librosa.load(file_path)
-    mel_spec = librosa.feature.melspectrogram(wave_data)
+
+    n_clips = int(len(wave_data)/(sr*5))
+    clip_index = np.random.choice(n_clips)
+
+    wave_data = wave_data[clip_index:clip_index + sr*5]
+
+    mel_spec = librosa.feature.melspectrogram(wave_data, fmin=300)
     mel_spec = librosa.power_to_db(mel_spec)
+    mel_spec = (mel_spec - np.min(mel_spec))/np.ptp(mel_spec)
+
     return mel_spec
 
 for i in tqdm(range(len(df_train))):
     audio_filename = df_train['filename'][i]
     bird = df_train['ebird_code'][i]
     file_path = os.path.join(audio_path, bird, audio_filename)
+
     try:
-        audio = MP3(file_path)
-        if audio.info.length > 45.0:
-           continue
         mel_spec = get_samples(file_path)
     except:
         continue
+
+
     new_item = {'mel spec': mel_spec, 'bird': bird, 'id': audio_filename}
     audio_samples.append(new_item)
 
